@@ -1,0 +1,57 @@
+import serial
+import time
+from qiskit import QuantumCircuit
+from qiskit_aer import AerSimulator
+
+# --- THE QUANTUM BRAIN ---
+def get_quantum_bit():
+    """Generates a true quantum bit using a Hadamard gate."""
+    qc = QuantumCircuit(1)
+    qc.h(0) # Put qubit in superposition (50/50 chance)
+    qc.measure_all()
+    
+    # Run simulation
+    sim = AerSimulator()
+    result = sim.run(qc, shots=1).result()
+    counts = result.get_counts()
+    return list(counts.keys())[0] # Returns '0' or '1'
+
+# --- HARDWARE CONNECTION ---
+# Double-check that your Arduino is on 'COM3' in the Arduino IDE!
+try:
+    ser = serial.Serial('COM3', 9600, timeout=2)
+    time.sleep(2) # Wait for Arduino to reset
+    print("Successfully connected to LuxCrypt Hardware on COM3.")
+except Exception as e:
+    print(f"ERROR: Could not connect to Arduino. {e}")
+    exit()
+
+# --- THE EXECUTION LOOP ---
+print("\n--- Starting LuxCrypt Pulse ---")
+bit = get_quantum_bit()
+
+if bit == '1':
+    print("Quantum State |1> detected. Alice is sending a light pulse...")
+    ser.write(b'1') # Tells Arduino to fire the LED
+    
+    # Wait for Bob (the LDR on the same Arduino) to report back
+    # The Arduino code must use Serial.println(lightValue)
+    bob_reading = ser.readline().decode().strip()
+    
+    if bob_reading:
+        print(f"Bob's LDR detected a light value of: {bob_reading}")
+        
+        # Calibration check (Adjust 500 based on your room's light)
+        if int(bob_reading) > 200:
+            print("SUCCESS: Quantum Bit successfully transmitted via light!")
+        else:
+            print("ERROR: Pulse lost or intercepted (QBER too high).")
+    else:
+        print("ERROR: Bob did not respond. Check Arduino code.")
+
+else:
+    print("Quantum State |0> detected. No pulse sent.")
+    print("Alice and Bob agree: Key bit is 0.")
+
+print("--- Pulse Complete ---\n")
+ser.close()
